@@ -12,7 +12,7 @@ const app = express();
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (e.g. mobile apps, curl) and any localhost origin
-    if (!origin || /^http:\/\/localhost(:\d+)?$/.test(origin)) || origin === 'https://bloomcare-chi.vercel.app') {
+    if (!origin || origin === 'https://bloomcare-chi.vercel.app' || /^http:\/\/localhost(:\d+)?$/.test(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
