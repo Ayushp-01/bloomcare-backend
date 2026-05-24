@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 
 dotenv.config();
+process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '3650d';
 connectDB();
 
 const app = express();
