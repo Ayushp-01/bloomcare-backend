@@ -4,7 +4,7 @@ const User = require('../models/User');
 const Profile = require('../models/Profile');
 const router = express.Router();
 
-const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE });
+const generateToken = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '3650d' });
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
