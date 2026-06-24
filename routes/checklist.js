@@ -1,50 +1,88 @@
 const express = require('express');
+const Checklist = require('../models/Checklist');
 const { protect } = require('../middleware/auth');
 const router = express.Router();
 
-// Store checklist state in memory per user (in production, use a DB model)
-// For now we use a simple in-memory store; frontend uses localStorage for persistence
 // GET /api/checklist
-router.get('/', protect, (req, res) => {
-  res.json({
-    pregnancy: [
-      { id: 'p1', trimester: 1, task: 'Book first prenatal appointment', category: 'Medical' },
-      { id: 'p2', trimester: 1, task: 'Start prenatal vitamins (folic acid)', category: 'Medical' },
-      { id: 'p3', trimester: 1, task: 'Get blood tests done', category: 'Medical' },
-      { id: 'p4', trimester: 1, task: 'Calculate due date', category: 'Planning' },
-      { id: 'p5', trimester: 1, task: 'Inform close family members', category: 'Personal' },
-      { id: 'p6', trimester: 2, task: 'Schedule NT scan (11-13 weeks)', category: 'Medical' },
-      { id: 'p7', trimester: 2, task: 'Anomaly scan (18-20 weeks)', category: 'Medical' },
-      { id: 'p8', trimester: 2, task: 'Start maternity clothes shopping', category: 'Shopping' },
-      { id: 'p9', trimester: 2, task: 'Register for antenatal classes', category: 'Education' },
-      { id: 'p10', trimester: 2, task: 'Discuss birth plan with doctor', category: 'Medical' },
-      { id: 'p11', trimester: 3, task: 'Tour hospital/birth center', category: 'Planning' },
-      { id: 'p12', trimester: 3, task: 'Install car seat', category: 'Baby' },
-      { id: 'p13', trimester: 3, task: 'Pack hospital bag', category: 'Planning' },
-      { id: 'p14', trimester: 3, task: 'Prepare baby nursery', category: 'Baby' },
-      { id: 'p15', trimester: 3, task: 'Discuss maternity leave with employer', category: 'Personal' },
-    ],
-    hospitalBag: [
-      { id: 'h1', category: 'Documents', item: 'ID / Aadhar card' },
-      { id: 'h2', category: 'Documents', item: 'Hospital registration documents' },
-      { id: 'h3', category: 'Documents', item: 'Insurance cards' },
-      { id: 'h4', category: 'Documents', item: 'Birth plan copy' },
-      { id: 'h5', category: 'Mother Essentials', item: 'Comfortable nightgown / hospital gown' },
-      { id: 'h6', category: 'Mother Essentials', item: 'Slippers / non-slip socks' },
-      { id: 'h7', category: 'Mother Essentials', item: 'Toiletries & personal care items' },
-      { id: 'h8', category: 'Mother Essentials', item: 'Nursing bra & breast pads' },
-      { id: 'h9', category: 'Mother Essentials', item: 'Sanitary pads (maternity)' },
-      { id: 'h10', category: 'Baby Essentials', item: 'Onesies & bodysuits (3-5 sets)' },
-      { id: 'h11', category: 'Baby Essentials', item: 'Baby blanket / swaddle' },
-      { id: 'h12', category: 'Baby Essentials', item: 'Diapers & wipes' },
-      { id: 'h13', category: 'Baby Essentials', item: 'Baby cap & mittens' },
-      { id: 'h14', category: 'For Partner', item: 'Change of clothes (2 days)' },
-      { id: 'h15', category: 'For Partner', item: 'Snacks & water bottle' },
-      { id: 'h16', category: 'Electronics', item: 'Phone charger & power bank' },
-      { id: 'h17', category: 'Electronics', item: 'Camera / extra SD card' },
-      { id: 'h18', category: 'Medications', item: 'Prescribed medications list' },
-    ]
-  });
+router.get('/', protect, async (req, res) => {
+  try {
+    const items = await Checklist.find({ user: req.user._id }).sort({ createdAt: 1 });
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/checklist
+router.post('/', protect, async (req, res) => {
+  try {
+    const { tab, text, completed } = req.body;
+    const item = await Checklist.create({
+      user: req.user._id,
+      tab: tab || 'Custom',
+      text,
+      completed: completed || false
+    });
+    res.status(201).json(item);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/checklist/:id
+router.put('/:id', protect, async (req, res) => {
+  try {
+    const { text, completed, tab } = req.body;
+    const item = await Checklist.findOne({ _id: req.params.id, user: req.user._id });
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    
+    if (text !== undefined) item.text = text;
+    if (completed !== undefined) item.completed = completed;
+    if (tab !== undefined) item.tab = tab;
+    
+    await item.save();
+    res.json(item);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/checklist/:id
+router.delete('/:id', protect, async (req, res) => {
+  try {
+    const item = await Checklist.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    if (!item) return res.status(404).json({ message: 'Item not found' });
+    res.json({ message: 'Item removed' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/checklist/sync
+// Optional: Sync endpoint if needed to migrate local storage
+router.post('/sync', protect, async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!items || !Array.isArray(items)) return res.status(400).json({ message: 'Invalid format' });
+    
+    // Add missing items
+    const inserted = [];
+    for (let it of items) {
+      const existing = await Checklist.findOne({ user: req.user._id, text: it.text, tab: it.tab });
+      if (!existing) {
+        const newItem = await Checklist.create({
+          user: req.user._id,
+          tab: it.tab,
+          text: it.text,
+          completed: it.completed
+        });
+        inserted.push(newItem);
+      }
+    }
+    res.status(201).json(inserted);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 module.exports = router;
